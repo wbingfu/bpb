@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out the code
+      - name: Check out your code
         uses: actions/checkout@v4
 
       - name: Set up Node.js
@@ -27,35 +27,39 @@ jobs:
         run: |
           npm install -g javascript-obfuscator
 
-      - name: Auto-detect and Copy Worker File
+      - name: Clone Upstream & Find Worker
         run: |
-          echo "🔍 Starting auto-search for worker.js..."
+          echo "🚀 Cloning the original repository to find the file..."
+          # 1. 直接克隆目标仓库到临时文件夹 temp_bpb
+          git clone https://github.com/bia-pain-bache/BPB-Worker-Panel.git temp_bpb
           
-          # 使用 find 命令在当前目录及子目录查找 worker.js
-          # -name "worker.js" : 查找这个名字
-          # -type f : 只找文件
-          # head -n 1 : 只取第一个找到的结果
-          FOUND_FILE=$(find . -name "worker.js" -type f | head -n 1)
+          echo "📂 Listing files in the cloned repo:"
+          # 列出所有文件，方便调试
+          find temp_bpb -maxdepth 3 -not -path '*/.*'
 
-          if [ -n "$FOUND_FILE" ]; then
-            echo "✅ Found file at: $FOUND_FILE"
-            cp "$FOUND_FILE" origin.js
+          echo "🔍 Searching for the main JS/TS worker file..."
+          # 2. 自动查找可能的入口文件 (worker.js, index.js, worker.ts, etc)
+          # 优先找 worker.js, 然后找 index.js
+          if [ -f "temp_bpb/src/worker.js" ]; then
+            TARGET_FILE="temp_bpb/src/worker.js"
+          elif [ -f "temp_bpb/build/worker.js" ]; then
+            TARGET_FILE="temp_bpb/build/worker.js"
+          elif [ -f "temp_bpb/src/index.js" ]; then
+            TARGET_FILE="temp_bpb/src/index.js"
           else
-            echo "❌ Error: Could not find 'worker.js' anywhere in the repository!"
-            
-            # 如果还是找不到，尝试找一下 index.js 作为备选
-            echo "⚠️ Trying to find index.js as fallback..."
-            FOUND_INDEX=$(find . -name "index.js" -type f | head -n 1)
-            
-            if [ -n "$FOUND_INDEX" ]; then
-               echo "✅ Found index.js at: $FOUND_INDEX"
-               cp "$FOUND_INDEX" origin.js
-            else
-               echo "❌ Fatal: Neither worker.js nor index.js found."
-               echo "📂 Listing all files for debugging:"
-               ls -R
-               exit 1
-            fi
+            # 如果都找不到，使用 find 命令暴力搜索第一个 JS 文件
+            TARGET_FILE=$(find temp_bpb -name "*.js" | grep -v "node_modules" | head -n 1)
+          fi
+
+          if [ -n "$TARGET_FILE" ]; then
+            echo "✅ Found worker file at: $TARGET_FILE"
+            # 3. 复制并重命名为 origin.js
+            cp "$TARGET_FILE" origin.js
+            # 清理临时文件夹
+            rm -rf temp_bpb
+          else
+            echo "❌ Fatal Error: Could not find any .js file in the cloned repository!"
+            exit 1
           fi
 
       - name: Obfuscate BPB worker js
