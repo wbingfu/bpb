@@ -21,49 +21,59 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "latest"
+          node-version: "20"  # 使用较新版本的 Node 以支持构建工具
 
-      - name: Install dependencies
+      - name: Install Obfuscator
         run: |
           npm install -g javascript-obfuscator
 
-      - name: Clone Upstream & Find Worker
+      - name: Build from Upstream
         run: |
-          echo "🚀 Cloning the original repository to find the file..."
-          # 1. 直接克隆目标仓库到临时文件夹 temp_bpb
-          git clone https://github.com/bia-pain-bache/BPB-Worker-Panel.git temp_bpb
+          echo "🚀 Cloning upstream repository..."
+          git clone https://github.com/bia-pain-bache/BPB-Worker-Panel.git build_temp
           
-          echo "📂 Listing files in the cloned repo:"
-          # 列出所有文件，方便调试
-          find temp_bpb -maxdepth 3 -not -path '*/.*'
-
-          echo "🔍 Searching for the main JS/TS worker file..."
-          # 2. 自动查找可能的入口文件 (worker.js, index.js, worker.ts, etc)
-          # 优先找 worker.js, 然后找 index.js
-          if [ -f "temp_bpb/src/worker.js" ]; then
-            TARGET_FILE="temp_bpb/src/worker.js"
-          elif [ -f "temp_bpb/build/worker.js" ]; then
-            TARGET_FILE="temp_bpb/build/worker.js"
-          elif [ -f "temp_bpb/src/index.js" ]; then
-            TARGET_FILE="temp_bpb/src/index.js"
+          cd build_temp
+          
+          echo "📦 Installing dependencies..."
+          npm install
+          
+          echo "🛠️ Building project..."
+          # 这里尝试运行构建命令，通常是 npm run build
+          # 构建会将高级语法转换为标准 JS
+          npm run build
+          
+          echo "🔍 Finding the built file..."
+          # 构建后的文件通常在 dist 目录，我们需要找到它
+          # 常见的构建输出文件名为 _worker.js, index.js 或 worker.js
+          if [ -f "dist/index.js" ]; then
+            BUILT_FILE="dist/index.js"
+          elif [ -f "dist/worker.js" ]; then
+            BUILT_FILE="dist/worker.js"
+          elif [ -f "dist/_worker.js" ]; then
+            BUILT_FILE="dist/_worker.js"
           else
-            # 如果都找不到，使用 find 命令暴力搜索第一个 JS 文件
-            TARGET_FILE=$(find temp_bpb -name "*.js" | grep -v "node_modules" | head -n 1)
+            # 暴力搜索 dist 目录下的 js 文件
+            BUILT_FILE=$(find dist -name "*.js" | head -n 1)
           fi
-
-          if [ -n "$TARGET_FILE" ]; then
-            echo "✅ Found worker file at: $TARGET_FILE"
-            # 3. 复制并重命名为 origin.js
-            cp "$TARGET_FILE" origin.js
-            # 清理临时文件夹
-            rm -rf temp_bpb
-          else
-            echo "❌ Fatal Error: Could not find any .js file in the cloned repository!"
+          
+          if [ -z "$BUILT_FILE" ]; then
+            echo "❌ Build failed or output not found!"
+            ls -R dist
             exit 1
           fi
 
+          echo "✅ Found built file: $BUILT_FILE"
+          
+          # 将构建好的文件复制回上一级目录的 origin.js
+          cp "$BUILT_FILE" ../origin.js
+          
+          cd ..
+          rm -rf build_temp
+          echo "🎉 Ready to obfuscate!"
+
       - name: Obfuscate BPB worker js
         run: |
+          # 现在的 origin.js 是经过编译的标准代码，不会再报错了
           javascript-obfuscator origin.js --output _worker.js \
           --compact true \
           --control-flow-flattening true \
