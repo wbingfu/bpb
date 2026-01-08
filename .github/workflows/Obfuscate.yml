@@ -5,7 +5,6 @@ on:
     branches:
       - main
   schedule:
-    # Runs everyday at 1:00 AM
     - cron: "0 1 * * *"
 
 permissions:
@@ -28,17 +27,35 @@ jobs:
         run: |
           npm install -g javascript-obfuscator
 
-      - name: Prepare Worker File
+      - name: Auto-detect and Copy Worker File
         run: |
-          # 修复点：直接从本地仓库复制 src/worker.js，不再使用 wget 下载
-          # 这样可以100%避免 404 Not Found 错误
-          if [ -f "src/worker.js" ]; then
-            cp src/worker.js origin.js
-            echo "✅ Successfully copied src/worker.js to origin.js"
+          echo "🔍 Starting auto-search for worker.js..."
+          
+          # 使用 find 命令在当前目录及子目录查找 worker.js
+          # -name "worker.js" : 查找这个名字
+          # -type f : 只找文件
+          # head -n 1 : 只取第一个找到的结果
+          FOUND_FILE=$(find . -name "worker.js" -type f | head -n 1)
+
+          if [ -n "$FOUND_FILE" ]; then
+            echo "✅ Found file at: $FOUND_FILE"
+            cp "$FOUND_FILE" origin.js
           else
-            echo "❌ Error: src/worker.js not found!"
-            ls -R
-            exit 1
+            echo "❌ Error: Could not find 'worker.js' anywhere in the repository!"
+            
+            # 如果还是找不到，尝试找一下 index.js 作为备选
+            echo "⚠️ Trying to find index.js as fallback..."
+            FOUND_INDEX=$(find . -name "index.js" -type f | head -n 1)
+            
+            if [ -n "$FOUND_INDEX" ]; then
+               echo "✅ Found index.js at: $FOUND_INDEX"
+               cp "$FOUND_INDEX" origin.js
+            else
+               echo "❌ Fatal: Neither worker.js nor index.js found."
+               echo "📂 Listing all files for debugging:"
+               ls -R
+               exit 1
+            fi
           fi
 
       - name: Obfuscate BPB worker js
