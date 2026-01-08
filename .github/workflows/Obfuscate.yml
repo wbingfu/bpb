@@ -5,8 +5,8 @@ on:
     branches:
       - main
   schedule:
-        # Runs everyday at 1:00 AM
-        - cron: "0 1 * * *"
+    # Runs everyday at 1:00 AM
+    - cron: "0 1 * * *"
 
 permissions:
   contents: write
@@ -28,10 +28,19 @@ jobs:
         run: |
           npm install -g javascript-obfuscator
 
-      - name: Clone BPB workjs
+      - name: Prepare Worker File
         run: |
-          wget -O origin.js https://github.com/bia-pain-bache/BPB-Worker-Panel/blob/main/src/worker.ts
-      
+          # 修复点：直接从本地仓库复制 src/worker.js，不再使用 wget 下载
+          # 这样可以100%避免 404 Not Found 错误
+          if [ -f "src/worker.js" ]; then
+            cp src/worker.js origin.js
+            echo "✅ Successfully copied src/worker.js to origin.js"
+          else
+            echo "❌ Error: src/worker.js not found!"
+            ls -R
+            exit 1
+          fi
+
       - name: Obfuscate BPB worker js
         run: |
           javascript-obfuscator origin.js --output _worker.js \
